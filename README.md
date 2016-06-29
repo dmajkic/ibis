@@ -1,2 +1,3 @@
 # ibis
-JsonApi first server framework
+JsonApi first http server framework
+
