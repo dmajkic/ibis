@@ -13,7 +13,7 @@ import (
 const TOKEN_LIFETIME = time.Hour*24*5 + time.Second*56
 
 // JWT token generation
-func (s *Ibis) GenerateToken(user_id interface{}, system interface{}) (string, *time.Time, error) {
+func (s *Server) GenerateToken(user_id interface{}, system interface{}) (string, *time.Time, error) {
 
 	if user_id == "" {
 		return "", nil, fmt.Errorf("User unknown.")
@@ -33,7 +33,7 @@ func (s *Ibis) GenerateToken(user_id interface{}, system interface{}) (string, *
 }
 
 // Validate token form http request
-func (s *Ibis) CheckToken(request *http.Request) (*jwt.Token, error) {
+func (s *Server) CheckToken(request *http.Request) (*jwt.Token, error) {
 	token, err := jwt.ParseFromRequest(request, func(token *jwt.Token) (interface{}, error) {
 
 		if token, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -47,7 +47,7 @@ func (s *Ibis) CheckToken(request *http.Request) (*jwt.Token, error) {
 }
 
 // Authenticate using JWT tokens
-func (s *Ibis) AuthJWT(secret string) gin.HandlerFunc {
+func (s *Server) AuthJWT(secret string) gin.HandlerFunc {
 	s.authToken = secret
 	return func(c *gin.Context) {
 		token, err := s.CheckToken(c.Request)
@@ -63,7 +63,7 @@ func (s *Ibis) AuthJWT(secret string) gin.HandlerFunc {
 // Login handler to login user. Actual login is performed in user app,
 // and it is expectd to return valid "id" field. If login went Ok,
 // then valid JWT token is generated.
-func (s *Ibis) JWTloginHandler(c *gin.Context) {
+func (s *Server) JWTloginHandler(c *gin.Context) {
 
 	user := make(map[string]interface{})
 
@@ -97,7 +97,7 @@ func (s *Ibis) JWTloginHandler(c *gin.Context) {
 }
 
 // Valid token can be renewed
-func (s *Ibis) JWTrenewHandler(c *gin.Context) {
+func (s *Server) JWTrenewHandler(c *gin.Context) {
 
 	token, err := s.CheckToken(c.Request)
 
@@ -118,6 +118,6 @@ func (s *Ibis) JWTrenewHandler(c *gin.Context) {
 
 // logoutHandler invalidates JWT token
 // TODO: Invalidate JWT token
-func (l *Ibis) JWTlogoutHandler(c *gin.Context) {
+func (l *Server) JWTlogoutHandler(c *gin.Context) {
 	c.AbortWithStatus(http.StatusNoContent)
 }

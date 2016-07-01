@@ -10,7 +10,7 @@ import (
 )
 
 // Resources is a helper function to set jsonapi routes for model
-func (p *Ibis) Resources(router *gin.RouterGroup, name, parent string, model interface{}) {
+func (p *Server) Resources(router *gin.RouterGroup, name, parent string, model interface{}) {
 
 	if meta, ok := model.(jsonapi.MetaFiller); ok {
 		router.GET("/"+name+"/:id", p.getIdMetaHandler(model, meta))
@@ -43,7 +43,7 @@ func JSONError422(c *gin.Context, source string, err error) {
 }
 
 // Handler to return JSONAPI resource array, with optional parent
-func (p *Ibis) getHandler(model interface{}, parent string) func(c *gin.Context) {
+func (p *Server) getHandler(model interface{}, parent string) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var parent_id string
 
@@ -64,7 +64,7 @@ func (p *Ibis) getHandler(model interface{}, parent string) func(c *gin.Context)
 }
 
 // IdMetaHandler is for single model with support for MetaFiller interface
-func (p *Ibis) getIdMetaHandler(model interface{}, meta jsonapi.MetaFiller) func(c *gin.Context) {
+func (p *Server) getIdMetaHandler(model interface{}, meta jsonapi.MetaFiller) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -96,7 +96,7 @@ func (p *Ibis) getIdMetaHandler(model interface{}, meta jsonapi.MetaFiller) func
 }
 
 // Handler to return single JSONAPI resource for specified id
-func (p *Ibis) getIdHandler(model interface{}) func(c *gin.Context) {
+func (p *Server) getIdHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -125,7 +125,7 @@ func (p *Ibis) getIdHandler(model interface{}) func(c *gin.Context) {
 }
 
 // Handler to delete JSONAPI resource
-func (p *Ibis) deleteHandler(model interface{}) func(c *gin.Context) {
+func (p *Server) deleteHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -144,7 +144,7 @@ func (p *Ibis) deleteHandler(model interface{}) func(c *gin.Context) {
 }
 
 // Handler for PATCH to update JSONAPI resource
-func (p *Ibis) patchHandler(model interface{}) func(c *gin.Context) {
+func (p *Server) patchHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		data := &jsonapi.DocItem{
 			Data:  jsonapi.NewResource("", ""),
@@ -173,7 +173,7 @@ func (p *Ibis) patchHandler(model interface{}) func(c *gin.Context) {
 }
 
 // Handler for POST to create JSONAPI resource
-func (p *Ibis) postHandler(model interface{}) func(c *gin.Context) {
+func (p *Server) postHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var err error
 		var result *jsonapi.DocItem

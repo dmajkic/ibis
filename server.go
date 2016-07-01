@@ -30,8 +30,8 @@ type Config struct {
 	Stderr, Stdout string
 }
 
-// Core Ibis struct
-type Ibis struct {
+// Core Server struct
+type Server struct {
 	*Config
 	sync.RWMutex
 	Listener net.Listener
@@ -47,7 +47,7 @@ type Ibis struct {
 
 // Start should not block. Do the actual work async.
 // This is to allow easy daemon or service support
-func (p *Ibis) StartServer() error {
+func (p *Server) StartServer() error {
 
 	// Reload config file
 	var config *Config
@@ -64,7 +64,7 @@ func (p *Ibis) StartServer() error {
 }
 
 // Actual server bootstrap proc
-func (p *Ibis) run() {
+func (p *Server) run() {
 
 	var err error
 
@@ -110,7 +110,7 @@ func (p *Ibis) run() {
 }
 
 // Stop service should be quick
-func (p *Ibis) StopServer() error {
+func (p *Server) StopServer() error {
 	if p.Listener != nil {
 		p.Listener.Close()
 	}
@@ -119,14 +119,14 @@ func (p *Ibis) StopServer() error {
 }
 
 // Reloads config.json file via server restart
-func (p *Ibis) ReloadConfig() error {
+func (p *Server) ReloadConfig() error {
 	p.StopServer()
 	return p.StartServer()
 }
 
 // ListenAndServe loads config.json, starts server and
 // waits until serveer stops
-func (p *Ibis) ListenAndServe() error {
+func (p *Server) ListenAndServe() error {
 
 	// Load config file
 	var config *Config
@@ -181,14 +181,14 @@ func LoadConfig() (*Config, error) {
 }
 
 // Server constructor
-func New(app App, ormDriver string) (*Ibis, error) {
+func New(app App, ormDriver string) (*Server, error) {
 
 	db, err := jsonapi.NewDatabase(ormDriver)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Ibis{
+	return &Server{
 		Db:  db,
 		App: app,
 	}, nil
