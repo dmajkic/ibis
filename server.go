@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/dmajkic/ibis/jsonapi"
+	_ "github.com/dmajkic/ibis/jsonapi/none"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,12 +59,12 @@ func (p *Ibis) StartServer() error {
 
 	p.Config = config
 
-	go p.Run()
+	go p.run()
 	return nil
 }
 
 // Actual server bootstrap proc
-func (p *Ibis) Run() {
+func (p *Ibis) run() {
 
 	var err error
 
@@ -123,7 +124,25 @@ func (p *Ibis) ReloadConfig() error {
 	return p.StartServer()
 }
 
-// Load user config.json from same place where app is
+// ListenAndServe loads config.json, starts server and
+// waits until serveer stops
+func (p *Ibis) ListenAndServe() error {
+
+	// Load config file
+	var config *Config
+	var err error
+
+	if config, err = LoadConfig(); err != nil {
+		return err
+	}
+
+	p.Config = config
+
+	p.run()
+	return nil
+}
+
+// Load config.json file from same place where app is
 func LoadConfig() (*Config, error) {
 	// Default config
 	conf := &Config{
@@ -140,12 +159,12 @@ func LoadConfig() (*Config, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		log.Println("JSON config file not found. Using default settings:")
 		log.Printf("Listen on: %v:%v", conf.Server, conf.Port)
-		log.Printf("Databse:   %v\n", conf.DbAdapter)
+		log.Printf("Database:   %v\n", conf.DbAdapter)
 		log.Println("")
 		return conf, nil
 	}
 
-	// Open json config file
+	// Open config file
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
