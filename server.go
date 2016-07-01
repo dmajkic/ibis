@@ -47,7 +47,7 @@ type Server struct {
 
 // Start should not block. Do the actual work async.
 // This is to allow easy daemon or service support
-func (p *Server) StartServer() error {
+func (s *Server) StartServer() error {
 
 	// Reload config file
 	var config *Config
@@ -57,21 +57,21 @@ func (p *Server) StartServer() error {
 		return err
 	}
 
-	p.Config = config
+	s.Config = config
 
-	go p.run()
+	go s.run()
 	return nil
 }
 
 // Actual server bootstrap proc
-func (p *Server) run() {
+func (s *Server) run() {
 
 	var err error
 
 	// Database connection
-	p.Db, err = p.Db.ConnectDB(map[string]string{
-		"adapter": p.DbAdapter,
-		"dbUrl":   p.DbUrl,
+	s.Db, err = s.Db.ConnectDB(map[string]string{
+		"adapter": s.DbAdapter,
+		"dbUrl":   s.DbUrl,
 	})
 
 	if err != nil {
@@ -80,28 +80,28 @@ func (p *Server) run() {
 	}
 
 	// Web server
-	p.Tokens = make(map[string]string)
-	p.Listener, err = net.Listen("tcp", p.Server+":"+p.Port)
+	s.Tokens = make(map[string]string)
+	s.Listener, err = net.Listen("tcp", s.Server+":"+s.Port)
+
 	if err != nil {
 		log.Fatal(err)
-		//logger.Error(err)
 		return
-	}
-
-	s := &http.Server{
-		Addr: p.Port,
 	}
 
 	// Router
 	router := gin.Default()
 
-	p.SetMiddleware(router)
-	p.App.SetRoutes(router)
+	s.SetMiddleware(router)
+	s.App.SetRoutes(router)
 
 	http.Handle("/", router)
 
+	srv := &http.Server{
+		Addr: s.Port,
+	}
+
 	// Serve somting
-	err = s.Serve(p.Listener)
+	err = srv.Serve(s.Listener)
 	if err != nil {
 		log.Printf("%v", err)
 	}
@@ -110,23 +110,23 @@ func (p *Server) run() {
 }
 
 // Stop service should be quick
-func (p *Server) StopServer() error {
-	if p.Listener != nil {
-		p.Listener.Close()
+func (s *Server) StopServer() error {
+	if s.Listener != nil {
+		s.Listener.Close()
 	}
 
 	return nil
 }
 
 // Reloads config.json file via server restart
-func (p *Server) ReloadConfig() error {
-	p.StopServer()
-	return p.StartServer()
+func (s *Server) ReloadConfig() error {
+	s.StopServer()
+	return s.StartServer()
 }
 
 // ListenAndServe loads config.json, starts server and
 // waits until serveer stops
-func (p *Server) ListenAndServe() error {
+func (s *Server) ListenAndServe() error {
 
 	// Load config file
 	var config *Config
@@ -136,9 +136,9 @@ func (p *Server) ListenAndServe() error {
 		return err
 	}
 
-	p.Config = config
+	s.Config = config
 
-	p.run()
+	s.run()
 	return nil
 }
 
@@ -157,9 +157,9 @@ func LoadConfig() (*Config, error) {
 
 	// If there is no config, use default settings
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		log.Println("JSON config file not found. Using default settings:")
+		log.Println("JSON config file not found.")
 		log.Printf("Listen on: %v:%v", conf.Server, conf.Port)
-		log.Printf("Database:   %v\n", conf.DbAdapter)
+		log.Printf("Database:  (none)")
 		log.Println("")
 		return conf, nil
 	}
@@ -177,6 +177,11 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return conf, err
 	}
+
+	log.Printf("Listen on: %v:%v", conf.Server, conf.Port)
+	log.Printf("Database:   %v\n", conf.DbAdapter)
+	log.Println("")
+
 	return conf, nil
 }
 

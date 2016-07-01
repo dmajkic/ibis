@@ -6,18 +6,18 @@ import (
 )
 
 // Set some basic API middleware
-func (l *Server) SetMiddleware(router *gin.Engine) {
-	router.Use(TracerMiddleware(l))
+func (s *Server) SetMiddleware(router *gin.Engine) {
+	router.Use(TracerMiddleware(s))
 	router.Use(CORSMiddleware())
 }
 
 // Adds session reference, uuid identification to every context
-func TracerMiddleware(m *Server) gin.HandlerFunc {
+func TracerMiddleware(s *Server) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, _ := uuid.NewV4()
 
 		c.Set("uuid", id)
-		c.Set("Server", m)
+		c.Set("Server", s)
 	}
 }
 

@@ -10,18 +10,18 @@ import (
 )
 
 // Resources is a helper function to set jsonapi routes for model
-func (p *Server) Resources(router *gin.RouterGroup, name, parent string, model interface{}) {
+func (s *Server) Resources(router *gin.RouterGroup, name, parent string, model interface{}) {
 
 	if meta, ok := model.(jsonapi.MetaFiller); ok {
-		router.GET("/"+name+"/:id", p.getIdMetaHandler(model, meta))
+		router.GET("/"+name+"/:id", s.getIdMetaHandler(model, meta))
 	} else {
-		router.GET("/"+name+"/:id", p.getIdHandler(model))
+		router.GET("/"+name+"/:id", s.getIdHandler(model))
 	}
 
-	router.GET("/"+name, p.getHandler(model, parent))
-	router.DELETE("/"+name+"/:id", p.deleteHandler(model))
-	router.PATCH("/"+name+"/:id", p.patchHandler(model))
-	router.POST("/"+name, p.postHandler(model))
+	router.GET("/"+name, s.getHandler(model, parent))
+	router.DELETE("/"+name+"/:id", s.deleteHandler(model))
+	router.PATCH("/"+name+"/:id", s.patchHandler(model))
+	router.POST("/"+name, s.postHandler(model))
 	// OPTIONS supported via CORSMiddleware()
 }
 
@@ -43,7 +43,7 @@ func JSONError422(c *gin.Context, source string, err error) {
 }
 
 // Handler to return JSONAPI resource array, with optional parent
-func (p *Server) getHandler(model interface{}, parent string) func(c *gin.Context) {
+func (s *Server) getHandler(model interface{}, parent string) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var parent_id string
 
@@ -53,7 +53,7 @@ func (p *Server) getHandler(model interface{}, parent string) func(c *gin.Contex
 			parent_id = c.DefaultQuery(parent, "")
 		}
 
-		result, err := p.Db.FindAll(model, parent_id, c.Request.URL.RawQuery)
+		result, err := s.Db.FindAll(model, parent_id, c.Request.URL.RawQuery)
 		if err != nil {
 			JSONError(c, http.StatusInternalServerError, err)
 			return
@@ -64,11 +64,11 @@ func (p *Server) getHandler(model interface{}, parent string) func(c *gin.Contex
 }
 
 // IdMetaHandler is for single model with support for MetaFiller interface
-func (p *Server) getIdMetaHandler(model interface{}, meta jsonapi.MetaFiller) func(c *gin.Context) {
+func (s *Server) getIdMetaHandler(model interface{}, meta jsonapi.MetaFiller) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		result, err := p.Db.FindRecord(model, id, c.Request.URL.RawQuery)
+		result, err := s.Db.FindRecord(model, id, c.Request.URL.RawQuery)
 
 		if err == jsonapi.ErrNotFound {
 			JSONError(c, http.StatusNotFound, err)
@@ -88,7 +88,7 @@ func (p *Server) getIdMetaHandler(model interface{}, meta jsonapi.MetaFiller) fu
 			delete(result.Data.Attributes, "data")
 		}
 
-		meta.AddMeta(p.Db, result)
+		meta.AddMeta(s.Db, result)
 
 		c.JSON(http.StatusOK, result)
 	}
@@ -96,11 +96,11 @@ func (p *Server) getIdMetaHandler(model interface{}, meta jsonapi.MetaFiller) fu
 }
 
 // Handler to return single JSONAPI resource for specified id
-func (p *Server) getIdHandler(model interface{}) func(c *gin.Context) {
+func (s *Server) getIdHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		result, err := p.Db.FindRecord(model, id, c.Request.URL.RawQuery)
+		result, err := s.Db.FindRecord(model, id, c.Request.URL.RawQuery)
 
 		if err == jsonapi.ErrNotFound {
 			JSONError(c, http.StatusNotFound, err)
@@ -125,11 +125,11 @@ func (p *Server) getIdHandler(model interface{}) func(c *gin.Context) {
 }
 
 // Handler to delete JSONAPI resource
-func (p *Server) deleteHandler(model interface{}) func(c *gin.Context) {
+func (s *Server) deleteHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		err := p.Db.Delete(model, id)
+		err := s.Db.Delete(model, id)
 
 		if err == jsonapi.ErrNotFound {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -144,7 +144,7 @@ func (p *Server) deleteHandler(model interface{}) func(c *gin.Context) {
 }
 
 // Handler for PATCH to update JSONAPI resource
-func (p *Server) patchHandler(model interface{}) func(c *gin.Context) {
+func (s *Server) patchHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		data := &jsonapi.DocItem{
 			Data:  jsonapi.NewResource("", ""),
@@ -163,7 +163,7 @@ func (p *Server) patchHandler(model interface{}) func(c *gin.Context) {
 			return
 		}
 
-		if err := p.Db.Update(model, id, data); err != nil {
+		if err := s.Db.Update(model, id, data); err != nil {
 			JSONError(c, 422, err)
 			return
 		}
@@ -173,7 +173,7 @@ func (p *Server) patchHandler(model interface{}) func(c *gin.Context) {
 }
 
 // Handler for POST to create JSONAPI resource
-func (p *Server) postHandler(model interface{}) func(c *gin.Context) {
+func (s *Server) postHandler(model interface{}) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var err error
 		var result *jsonapi.DocItem
@@ -189,7 +189,7 @@ func (p *Server) postHandler(model interface{}) func(c *gin.Context) {
 			return
 		}
 
-		if result, err = p.Db.Create(model, data); err != nil {
+		if result, err = s.Db.Create(model, data); err != nil {
 			JSONError(c, http.StatusInternalServerError, err)
 			return
 		}
