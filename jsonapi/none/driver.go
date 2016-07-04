@@ -13,7 +13,7 @@ type noneDriver struct {
 }
 
 func init() {
-	jsonapi.RegisterDriver("none", &noneDriver{})
+	jsonapi.RegisterDriver("none", &noneDriver{sync.RWMutex{}})
 }
 
 func (g *noneDriver) ConnectDB(config map[string]string) (jsonapi.Database, error) {
@@ -34,10 +34,63 @@ func getSliceValue(model interface{}) reflect.Value {
 	}
 
 	model_type := reflect.TypeOf(model)
-	models_type := reflect.MakeSlice(reflect.SliceOf(model_type), 1, 1).Type()
-	models := reflect.New(models_type)
-	reflect.AppendSlice(models, reflect.ValueOf(model))
+	models := reflect.MakeSlice(reflect.SliceOf(model_type), 1, 1)
+	models.Index(0).Set(reflect.ValueOf(model))
+
 	return models
+}
+
+// getItemId returns ID of the item by best guess
+func getItemId(item reflect.Value) interface{} {
+
+	// If item suports Resources - Use that
+	if r, ok := item.Interface().(jsonapi.Resourcer); ok {
+		return r.GetID()
+	}
+
+	// If item is not a struct, then whole object is used as ID
+	if item.Kind() != reflect.Struct {
+		return item.Interface()
+	}
+
+	// If struct item has field ID - use it
+	if value := item.FieldByName("ID"); value.IsValid() {
+		return value.Interface()
+	}
+
+	// If struct item has field Id - use it
+	if value := item.FieldByName("Id"); value.IsValid() {
+		return value.Interface()
+	}
+
+	// Return whole struct as its ID
+	return item.Interface()
+}
+
+// findItem finds id in slice using reflection
+func findItem(slice reflect.Value, id interface{}) int {
+
+	switch slice.Kind() {
+	case reflect.Struct:
+		if getItemId(slice) == id {
+			return 0
+		} else {
+			return -1
+		}
+	case reflect.Slice, reflect.Array:
+		break
+	default:
+		return -1
+	}
+
+	for i := 0; i < slice.Len(); i++ {
+		item := slice.Index(i)
+		if getItemId(item) == id {
+			return i
+		}
+	}
+
+	return -1
 }
 
 func (g *noneDriver) FindAll(model interface{}, parent_id interface{}, query string) (*jsonapi.DocCollection, error) {
@@ -46,7 +99,7 @@ func (g *noneDriver) FindAll(model interface{}, parent_id interface{}, query str
 
 	models := getSliceValue(model)
 
-	collection := make([]*jsonapi.Resource, models.Elem().Len())
+	collection := make([]*jsonapi.Resource, models.Len())
 	includes := jsonapi.NewIncludes()
 
 	for i, _ := range collection {
@@ -79,6 +132,9 @@ func (g *noneDriver) Delete(model interface{}, id interface{}) error {
 	defer g.Unlock()
 
 	models := getSliceValue(model)
+	if idx := findItem(models, id); idx >= 0 {
+
+	}
 
 	return nil
 }
@@ -88,6 +144,9 @@ func (g *noneDriver) Update(model interface{}, id interface{}, doc *jsonapi.DocI
 	defer g.Unlock()
 
 	models := getSliceValue(model)
+	if idx := findItem(models, id); idx >= 0 {
+
+	}
 
 	return nil
 }
@@ -103,8 +162,9 @@ func (g *noneDriver) Create(model interface{}, doc *jsonapi.DocItem) (*jsonapi.D
 	}
 
 	models := getSliceValue(model)
+	reflect.AppendSlice(models, reflect.ValueOf(model))
 
-	return nil, nil
+	return doc, nil
 }
 
 func (g *noneDriver) ToResource(value interface{}, includes *jsonapi.Includes) *jsonapi.Resource {
@@ -119,14 +179,14 @@ func (g *noneDriver) ToResource(value interface{}, includes *jsonapi.Includes) *
 		id = v.GetID()
 	}
 
-	typ := reflect.TypeOf(value)
+	typ := reflect.ValueOf(value)
 	if typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
 
 	resource := &jsonapi.Resource{
 		Id:            id,
-		Type:          typ.Name(),
+		Type:          typ.Type().Name(),
 		Relationships: make(map[string]*jsonapi.Relationship),
 		Attributes:    make(map[string]interface{}),
 	}
@@ -137,10 +197,14 @@ func (g *noneDriver) ToResource(value interface{}, includes *jsonapi.Includes) *
 		return resource
 	}
 
+	kin := reflect.TypeOf(value)
+
 	for i := 0; i < typ.NumField(); i++ {
-		p := typ.Field(i)
-		if !p.Anonymous && (strings.ToUpper(p.Name) != "ID") {
-			resource.Attributes[p.Name] = p.Type
+		f := typ.Field(i)
+		t := kin.Field(i)
+
+		if !t.Anonymous && (strings.ToUpper(t.Name) != "ID") {
+			resource.Attributes[t.Name] = f.Interface()
 		}
 	}
 
