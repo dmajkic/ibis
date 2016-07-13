@@ -10,32 +10,34 @@ import (
 	"sync"
 
 	"github.com/dmajkic/ibis/jsonapi"
+	// By default, none driver is alway present
 	_ "github.com/dmajkic/ibis/jsonapi/none"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Interface that must be implemented by user App
+// App interface that must be implemented by user application
 type App interface {
 	SetRoutes(router *gin.Engine)
 	LoginUser(c *gin.Context, user map[string]interface{}) error
 }
 
-// Basic config
+// Config struct for basic configuration
 type Config struct {
 	Server         string
 	Port           string
-	DbUrl          string
+	DbURL          string
 	DbAdapter      string
 	Stderr, Stdout string
 }
 
-// Core Server struct
+// Server is core struct
 type Server struct {
 	*Config
 	sync.RWMutex
 	Listener net.Listener
 	Db       jsonapi.Database
+	ModelDb  jsonapi.Database
 
 	exit      chan struct{}
 	authToken string
@@ -45,8 +47,8 @@ type Server struct {
 	App      App
 }
 
-// Start should not block. Do the actual work async.
-// This is to allow easy daemon or service support
+// StartServer is non-blocking server bootstrap. The actual work is async.
+// This is a helper for simple daemon or service support
 func (s *Server) StartServer() error {
 
 	// Reload config file
@@ -69,9 +71,9 @@ func (s *Server) run() {
 	var err error
 
 	// Database connection
-	s.Db, err = s.Db.ConnectDB(map[string]string{
+	err = s.Db.ConnectDB(map[string]string{
 		"adapter": s.DbAdapter,
-		"dbUrl":   s.DbUrl,
+		"dbUrl":   s.DbURL,
 	})
 
 	if err != nil {
@@ -109,7 +111,7 @@ func (s *Server) run() {
 	return
 }
 
-// Stop service should be quick
+// StopServer closes server listener and stops running server.
 func (s *Server) StopServer() error {
 	if s.Listener != nil {
 		s.Listener.Close()
@@ -118,7 +120,7 @@ func (s *Server) StopServer() error {
 	return nil
 }
 
-// Reloads config.json file via server restart
+// ReloadConfig reloads config.json file via server restart
 func (s *Server) ReloadConfig() error {
 	s.StopServer()
 	return s.StartServer()
@@ -142,13 +144,13 @@ func (s *Server) ListenAndServe() error {
 	return nil
 }
 
-// Load config.json file from same place where app is
+// LoadConfig loads config.json file from same place where the app is
 func LoadConfig() (*Config, error) {
 	// Default config
 	conf := &Config{
 		Server:    "",
 		Port:      "2828",
-		DbUrl:     "username:password@hostname/your_database?charset=utf8&parseTime=True&loc=Local",
+		DbURL:     "username:password@hostname/your_database?charset=utf8&parseTime=True&loc=Local",
 		DbAdapter: "mysql",
 	}
 
@@ -185,7 +187,7 @@ func LoadConfig() (*Config, error) {
 	return conf, nil
 }
 
-// Server constructor
+// New Server constructor
 func New(app App, ormDriver string) (*Server, error) {
 
 	db, err := jsonapi.NewDatabase(ormDriver)
@@ -193,8 +195,14 @@ func New(app App, ormDriver string) (*Server, error) {
 		return nil, err
 	}
 
+	modeldb, err := jsonapi.NewDatabase("none")
+	if err != nil {
+		return nil, err
+	}
+
 	return &Server{
-		Db:  db,
-		App: app,
+		Db:      db,
+		ModelDb: modeldb,
+		App:     app,
 	}, nil
 }

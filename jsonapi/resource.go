@@ -5,6 +5,7 @@ import (
 	"net/http"
 )
 
+// DocError creates JSONAPI DocItem document representing errors from error slice
 func DocError(httpErrorCode int, errors ...error) *DocItem {
 	errorlist := make([]Err, len(errors))
 
@@ -17,9 +18,10 @@ func DocError(httpErrorCode int, errors ...error) *DocItem {
 	return &DocItem{Data: nil, Errors: errorlist}
 }
 
+// NewResource creates JSONAPI Resource initialized with id and type fields
 func NewResource(id, typeName string) *Resource {
 	return &Resource{
-		Id:            id,
+		ID:            id,
 		Type:          typeName,
 		Attributes:    make(map[string]interface{}),
 		Relationships: make(map[string]*Relationship),
@@ -28,6 +30,7 @@ func NewResource(id, typeName string) *Resource {
 	}
 }
 
+// SetOneRelationship
 func (r *Resource) SetOneRelationship(name string, model interface{}, includes *Includes) *Relationship {
 
 	rel := &Relationship{}
@@ -35,33 +38,34 @@ func (r *Resource) SetOneRelationship(name string, model interface{}, includes *
 
 	rel.Links.Related = fmt.Sprintf("%v", name)
 
-	api, ok := model.(ApiConvertor)
+	api, ok := model.(ResourceConvertor)
 	if !ok {
-		//println(name, ": not ApiConvertor")
+		//println(name, ": not ResourceConvertor")
 		return rel
 	}
 
-	resource := api.JsonApiResource(includes)
+	resource := api.ToResource(includes)
 
-	if resource.Id == "" {
+	if resource.ID == "" {
 		//println(name, ": no ID")
 		return rel
 	}
 
-	rel.Links.Self = fmt.Sprintf("/%v/%v", name, r.Id)
+	rel.Links.Self = fmt.Sprintf("/%v/%v", name, r.ID)
 	rel.Data.IsSingle = true
 	rel.Data.ResourceIds = []ResourceIdentifier{
-		{Id: resource.Id, Type: resource.Type},
+		{ID: resource.ID, Type: resource.Type},
 	}
 
 	if includes != nil {
-		includes.Set(resource.Id, resource)
+		includes.Set(resource.ID, resource)
 	}
 
 	return rel
 }
 
-func (r *Resource) SetManyRelationship(name string, models []ApiConvertor, includes *Includes) *Relationship {
+// SetManyRelationship
+func (r *Resource) SetManyRelationship(name string, models []ResourceConvertor, includes *Includes) *Relationship {
 
 	rel := &Relationship{}
 	r.Relationships[name] = rel
@@ -76,17 +80,15 @@ func (r *Resource) SetManyRelationship(name string, models []ApiConvertor, inclu
 
 	rel.Data.ResourceIds = make([]ResourceIdentifier, len(models))
 	for i, item := range models {
-		if api, ok := item.(ApiConvertor); ok {
-			resource := api.JsonApiResource(includes)
-			rel.Data.ResourceIds[i] = ResourceIdentifier{
-				Id:   resource.Id,
-				Type: resource.Type,
-			}
-			if includes != nil {
-				includes.Set(resource.Id, resource)
-			}
-			resType = resource.Type
+		resource := item.ToResource(includes)
+		rel.Data.ResourceIds[i] = ResourceIdentifier{
+			ID:   resource.ID,
+			Type: resource.Type,
 		}
+		if includes != nil {
+			includes.Set(resource.ID, resource)
+		}
+		resType = resource.Type
 	}
 	rel.Links.Self = fmt.Sprintf("/%v", resType)
 	rel.Data.IsSingle = false

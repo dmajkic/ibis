@@ -16,7 +16,7 @@ type gormDriver struct {
 }
 
 func init() {
-	jsonapi.RegisterDriver("gorm", &gormDriver{})
+	jsonapi.RegisterDriver("gorm", &gormDriver{sync.RWMutex{}, nil})
 }
 
 func errConv(err error) error {
@@ -28,40 +28,28 @@ func errConv(err error) error {
 	}
 }
 
-func (g *gormDriver) ConnectDB(config map[string]string) (jsonapi.Database, error) {
+func (g *gormDriver) ConnectDB(config map[string]string) error {
 	db, err := gorm.Open(config["adapter"], config["dbUrl"])
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	db.LogMode(true)
-
-	return &gormDriver{sync.RWMutex{}, db}, nil
+	g.Orm = db
+	return nil
 }
 
-func (g *gormDriver) GetMany(model, value interface{}, foreign_keys ...string) error {
-	g.Lock()
-	defer g.Unlock()
-	return g.Orm.Model(model).Related(value, foreign_keys...).Error
-}
-
-func (g *gormDriver) GetOne(model, value interface{}, foreign_keys ...string) error {
-	g.Lock()
-	defer g.Unlock()
-	return g.Orm.Model(model).Related(value, foreign_keys...).Error
-}
-
-func (g *gormDriver) FindAll(model interface{}, parent_id interface{}, query string) (*jsonapi.DocCollection, error) {
+func (g *gormDriver) FindAll(model interface{}, parentID interface{}, query string) (*jsonapi.DocCollection, error) {
 	g.Lock()
 	defer g.Unlock()
 
-	model_type := reflect.TypeOf(model)
-	models_type := reflect.MakeSlice(reflect.SliceOf(model_type), 0, 0).Type()
-	models := reflect.New(models_type)
+	modelType := reflect.TypeOf(model)
+	modelsType := reflect.MakeSlice(reflect.SliceOf(modelType), 0, 0).Type()
+	models := reflect.New(modelsType)
 
 	// page[number] and page[size]
 
-	// TODO: Query parameters - "400 Bad Requset" ako nije moguce
+	// TODO: Query parameters - "400 Bad Requset" if not possible
 	//var q url.Values
 	//if q, err := url.ParseQuery(query); err != nil {
 	//	return nil, err
@@ -75,7 +63,7 @@ func (g *gormDriver) FindAll(model interface{}, parent_id interface{}, query str
 	//if fields, ok := q["fields"]; ok {}
 	//if page, ok := q["page"]; ok {}
 
-	scopes := DefaultScopes(model, parent_id)
+	scopes := DefaultScopes(model, parentID)
 
 	if err := g.Orm.Scopes(scopes...).Find(models.Interface()).Error; err != nil {
 		return nil, err
@@ -84,14 +72,14 @@ func (g *gormDriver) FindAll(model interface{}, parent_id interface{}, query str
 	collection := make([]*jsonapi.Resource, models.Elem().Len())
 	includes := jsonapi.NewIncludes()
 
-	for i, _ := range collection {
+	for i := range collection {
 		collection[i] = g.ToResource(models.Elem().Index(i).Interface(), includes)
 	}
 
 	return &jsonapi.DocCollection{
 		Data:     collection,
 		Included: includes.ToArray(),
-		JsonApi:  &jsonapi.JsonApiObject{Version: "1.0"},
+		JsonApi:  &jsonapi.JSONApiObject{Version: "1.0"},
 	}, nil
 }
 
@@ -99,20 +87,20 @@ func (g *gormDriver) FindRecord(model, id interface{}, query string) (*jsonapi.D
 	g.Lock()
 	defer g.Unlock()
 
-	model_type := reflect.TypeOf(model)
-	model_copy := reflect.New(model_type).Interface()
+	modelType := reflect.TypeOf(model)
+	modelCopy := reflect.New(modelType).Interface()
 
-	if err := g.Orm.Find(model_copy, "id=?", id).Error; err != nil {
+	if err := g.Orm.Find(modelCopy, "id=?", id).Error; err != nil {
 		return nil, errConv(err)
 	}
 
 	includes := jsonapi.NewIncludes()
-	item := g.ToResource(model_copy, includes)
+	item := g.ToResource(modelCopy, includes)
 
 	return &jsonapi.DocItem{
 		Data:     item,
 		Included: includes.ToArray(),
-		JsonApi:  &jsonapi.JsonApiObject{Version: "1.0"},
+		JsonApi:  &jsonapi.JSONApiObject{Version: "1.0"},
 	}, nil
 }
 
@@ -120,9 +108,9 @@ func (g *gormDriver) Delete(model interface{}, id interface{}) error {
 	g.Lock()
 	defer g.Unlock()
 
-	model_type := reflect.TypeOf(model)
-	model_copy := reflect.New(model_type).Interface()
-	err := g.Orm.Delete(model_copy, "id=?", id).Error
+	modelType := reflect.TypeOf(model)
+	modelCopy := reflect.New(modelType).Interface()
+	err := g.Orm.Delete(modelCopy, "id=?", id).Error
 
 	return errConv(err)
 }
@@ -141,8 +129,8 @@ func (g *gormDriver) Create(model interface{}, doc *jsonapi.DocItem) (*jsonapi.D
 	defer g.Unlock()
 
 	// If there is Id, user cen return "204 Ok - No Content", or retreive record by id
-	if doc.Data.Id != "" {
-		doc.Data.Attributes["id"] = doc.Data.Id
+	if doc.Data.ID != "" {
+		doc.Data.Attributes["id"] = doc.Data.ID
 		return nil, g.Orm.Model(model).Create(doc.Data.Attributes).Error
 	}
 
@@ -160,8 +148,8 @@ func (g *gormDriver) Create(model interface{}, doc *jsonapi.DocItem) (*jsonapi.D
 func (g *gormDriver) ToResource(value interface{}, includes *jsonapi.Includes) *jsonapi.Resource {
 
 	// Use ApiConvertor interface if there is one
-	if convertor, implements := value.(jsonapi.ApiConvertor); implements {
-		return convertor.JsonApiResource(includes)
+	if convertor, implements := value.(jsonapi.ResourceConvertor); implements {
+		return convertor.ToResource(includes)
 	}
 
 	// Else use orm reflection support
@@ -173,7 +161,7 @@ func (g *gormDriver) ToResource(value interface{}, includes *jsonapi.Includes) *
 	}
 
 	resource := &jsonapi.Resource{
-		Id:            id,
+		ID:            id,
 		Type:          scope.TableName(),
 		Relationships: make(map[string]*jsonapi.Relationship),
 		Attributes:    make(map[string]interface{}),

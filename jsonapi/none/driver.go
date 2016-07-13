@@ -1,6 +1,7 @@
-package gorm
+package none
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -16,76 +17,59 @@ func init() {
 	jsonapi.RegisterDriver("none", &noneDriver{sync.RWMutex{}})
 }
 
-func (g *noneDriver) ConnectDB(config map[string]string) (jsonapi.Database, error) {
-	return &noneDriver{sync.RWMutex{}}, nil
+func (g *noneDriver) ConnectDB(config map[string]string) error {
+	return nil
 }
 
-func getSliceValue(model interface{}) reflect.Value {
-	switch reflect.TypeOf(model).Kind() {
-	case reflect.Slice, reflect.Array:
-		return reflect.ValueOf(model)
-	case reflect.Ptr:
-		if reflect.TypeOf(reflect.ValueOf(model).Elem().Interface()).Kind() == reflect.Slice {
-			return getSliceValue(reflect.ValueOf(model).Elem().Interface())
-		}
-	case reflect.Func:
-		result := model.(func() interface{})()
-		return getSliceValue(result)
+func getSliceValue(model interface{}) []interface{} {
+
+	switch v := model.(type) {
+	case []interface{}:
+		return v
+	case *[]interface{}:
+		return *v
+	case func() interface{}:
+		return getSliceValue(v())
+	default:
+		return []interface{}{model}
 	}
-
-	model_type := reflect.TypeOf(model)
-	models := reflect.MakeSlice(reflect.SliceOf(model_type), 1, 1)
-	models.Index(0).Set(reflect.ValueOf(model))
-
-	return models
 }
 
 // getItemId returns ID of the item by best guess
-func getItemId(item reflect.Value) interface{} {
+func getItemID(item interface{}) interface{} {
 
 	// If item suports Resources - Use that
-	if r, ok := item.Interface().(jsonapi.Resourcer); ok {
+	if r, ok := item.(jsonapi.Resourcer); ok {
 		return r.GetID()
 	}
 
+	v := reflect.ValueOf(item)
+
 	// If item is not a struct, then whole object is used as ID
-	if item.Kind() != reflect.Struct {
-		return item.Interface()
+	if v.Kind() != reflect.Struct {
+		return item
 	}
 
 	// If struct item has field ID - use it
-	if value := item.FieldByName("ID"); value.IsValid() {
+	if value := v.FieldByName("ID"); v.IsValid() {
 		return value.Interface()
 	}
 
 	// If struct item has field Id - use it
-	if value := item.FieldByName("Id"); value.IsValid() {
+	if value := v.FieldByName("Id"); v.IsValid() {
 		return value.Interface()
 	}
 
 	// Return whole struct as its ID
-	return item.Interface()
+	println("No ID:", item)
+	return item
 }
 
 // findItem finds id in slice using reflection
-func findItem(slice reflect.Value, id interface{}) int {
+func findItem(slice []interface{}, id interface{}) int {
 
-	switch slice.Kind() {
-	case reflect.Struct:
-		if getItemId(slice) == id {
-			return 0
-		} else {
-			return -1
-		}
-	case reflect.Slice, reflect.Array:
-		break
-	default:
-		return -1
-	}
-
-	for i := 0; i < slice.Len(); i++ {
-		item := slice.Index(i)
-		if getItemId(item) == id {
+	for i, item := range slice {
+		if getItemID(item) == id {
 			return i
 		}
 	}
@@ -93,23 +77,23 @@ func findItem(slice reflect.Value, id interface{}) int {
 	return -1
 }
 
-func (g *noneDriver) FindAll(model interface{}, parent_id interface{}, query string) (*jsonapi.DocCollection, error) {
+func (g *noneDriver) FindAll(model interface{}, parentID interface{}, query string) (*jsonapi.DocCollection, error) {
 	g.Lock()
 	defer g.Unlock()
 
 	models := getSliceValue(model)
 
-	collection := make([]*jsonapi.Resource, models.Len())
+	collection := make([]*jsonapi.Resource, len(models))
 	includes := jsonapi.NewIncludes()
 
-	for i, _ := range collection {
-		collection[i] = g.ToResource(models.Index(i).Interface(), includes)
+	for i := range collection {
+		collection[i] = g.ToResource(models[i], includes)
 	}
 
 	return &jsonapi.DocCollection{
 		Data:     collection,
 		Included: includes.ToArray(),
-		JsonApi:  &jsonapi.JsonApiObject{Version: "1.0"},
+		JSONApi:  &jsonapi.VersionMeta{Version: "1.0"},
 	}, nil
 }
 
@@ -123,7 +107,7 @@ func (g *noneDriver) FindRecord(model, id interface{}, query string) (*jsonapi.D
 	return &jsonapi.DocItem{
 		Data:     item,
 		Included: includes.ToArray(),
-		JsonApi:  &jsonapi.JsonApiObject{Version: "1.0"},
+		JSONApi:  &jsonapi.VersionMeta{Version: "1.0"},
 	}, nil
 }
 
@@ -133,7 +117,9 @@ func (g *noneDriver) Delete(model interface{}, id interface{}) error {
 
 	models := getSliceValue(model)
 	if idx := findItem(models, id); idx >= 0 {
-
+		copy(models[idx:], models[idx+1:])
+		models[len(models)-1] = nil // or the zero value of T
+		models = models[:len(models)-1]
 	}
 
 	return nil
@@ -148,7 +134,7 @@ func (g *noneDriver) Update(model interface{}, id interface{}, doc *jsonapi.DocI
 
 	}
 
-	return nil
+	return jsonapi.ErrNotFound
 }
 
 func (g *noneDriver) Create(model interface{}, doc *jsonapi.DocItem) (*jsonapi.DocItem, error) {
@@ -156,13 +142,12 @@ func (g *noneDriver) Create(model interface{}, doc *jsonapi.DocItem) (*jsonapi.D
 	defer g.Unlock()
 
 	// If there is Id, user cen return "204 Ok - No Content", or retreive record by id
-	if doc.Data.Id != "" {
-		doc.Data.Attributes["id"] = doc.Data.Id
+	if doc.Data.ID != "" {
+		doc.Data.Attributes["id"] = doc.Data.ID
 		return nil, nil
 	}
 
-	models := getSliceValue(model)
-	reflect.AppendSlice(models, reflect.ValueOf(model))
+	//append(getSliceValue(model), model)
 
 	return doc, nil
 }
@@ -170,8 +155,8 @@ func (g *noneDriver) Create(model interface{}, doc *jsonapi.DocItem) (*jsonapi.D
 func (g *noneDriver) ToResource(value interface{}, includes *jsonapi.Includes) *jsonapi.Resource {
 
 	// Use ApiConvertor interface if there is one
-	if convertor, implements := value.(jsonapi.ApiConvertor); implements {
-		return convertor.JsonApiResource(includes)
+	if convertor, implements := value.(jsonapi.ResourceConvertor); implements {
+		return convertor.ToResource(includes)
 	}
 
 	id := ""
@@ -185,7 +170,7 @@ func (g *noneDriver) ToResource(value interface{}, includes *jsonapi.Includes) *
 	}
 
 	resource := &jsonapi.Resource{
-		Id:            id,
+		ID:            id,
 		Type:          typ.Type().Name(),
 		Relationships: make(map[string]*jsonapi.Relationship),
 		Attributes:    make(map[string]interface{}),
@@ -193,18 +178,20 @@ func (g *noneDriver) ToResource(value interface{}, includes *jsonapi.Includes) *
 
 	if typ.Kind() != reflect.Struct {
 		resource.Attributes["value"] = value
-		resource.Id = "value"
+		resource.ID = fmt.Sprintf("%v", value)
 		return resource
 	}
 
-	kin := reflect.TypeOf(value)
+	kin := typ.Type()
 
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		t := kin.Field(i)
 
 		if !t.Anonymous && (strings.ToUpper(t.Name) != "ID") {
-			resource.Attributes[t.Name] = f.Interface()
+			resource.Attributes[jsonapi.LowerInitial(t.Name)] = f.Interface()
+		} else if resource.ID == "" {
+			resource.ID = fmt.Sprintf("%v", f.Interface())
 		}
 	}
 

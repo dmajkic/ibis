@@ -9,21 +9,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Default token lifetime set to 5 days and 56 seconds
-const TOKEN_LIFETIME = time.Hour*24*5 + time.Second*56
+// TokenLifetime Default token lifetime set to 5 days and 56 seconds
+var TokenLifetime = time.Hour*24*5 + time.Second*56
 
-// JWT token generation
-func (s *Server) GenerateToken(user_id interface{}, system interface{}) (string, *time.Time, error) {
+// GenerateToken creates JWT token
+func (s *Server) GenerateToken(userID interface{}, system interface{}) (string, *time.Time, error) {
 
-	if user_id == "" {
+	if userID == "" {
 		return "", nil, fmt.Errorf("User unknown.")
 	}
 
 	token := jwt.New(jwt.SigningMethodHS256)
-	exp := time.Now().Add(TOKEN_LIFETIME)
+	exp := time.Now().Add(TokenLifetime)
 
 	// Set some claims
-	token.Claims["ID"] = user_id
+	token.Claims["ID"] = userID
 	token.Claims["sys"] = system
 	token.Claims["exp"] = exp.Unix()
 
@@ -32,12 +32,12 @@ func (s *Server) GenerateToken(user_id interface{}, system interface{}) (string,
 	return tokenString, &exp, err
 }
 
-// Validate token form http request
+// CheckToken validates token found in  http request
 func (s *Server) CheckToken(request *http.Request) (*jwt.Token, error) {
 	token, err := jwt.ParseFromRequest(request, func(token *jwt.Token) (interface{}, error) {
 
 		if token, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Alg)
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Alg())
 		}
 
 		return []byte(s.authToken), nil
@@ -46,7 +46,7 @@ func (s *Server) CheckToken(request *http.Request) (*jwt.Token, error) {
 	return token, err
 }
 
-// Authenticate using JWT tokens
+// AuthJWT authenticates using JWT tokens
 func (s *Server) AuthJWT(secret string) gin.HandlerFunc {
 	s.authToken = secret
 	return func(c *gin.Context) {
@@ -60,9 +60,9 @@ func (s *Server) AuthJWT(secret string) gin.HandlerFunc {
 	}
 }
 
-// Login handler to login user. Actual login is performed in user app,
-// and it is expectd to return valid "id" field. If login went Ok,
-// then valid JWT token is generated.
+// JWTloginHandler is a handler to login user. Actual login is performed in user app,
+// and it is expectd to return valid "id" field.
+// If login is successful, valid JWT token is generated.
 func (s *Server) JWTloginHandler(c *gin.Context) {
 
 	user := make(map[string]interface{})
@@ -96,8 +96,9 @@ func (s *Server) JWTloginHandler(c *gin.Context) {
 	})
 }
 
-// Valid token can be renewed
-func (s *Server) JWTrenewHandler(c *gin.Context) {
+// JWTRenewHandler Valid token can be renewed
+// JWT token is first check if it is valid, and then regenerated
+func (s *Server) JWTRenewHandler(c *gin.Context) {
 
 	token, err := s.CheckToken(c.Request)
 
@@ -116,8 +117,8 @@ func (s *Server) JWTrenewHandler(c *gin.Context) {
 	})
 }
 
-// logoutHandler invalidates JWT token
-// TODO: Invalidate JWT token
-func (l *Server) JWTlogoutHandler(c *gin.Context) {
+// JWTlogoutHandler invalidates JWT token
+// TODO: Invalidate JWT token - Not implemented
+func (s *Server) JWTlogoutHandler(c *gin.Context) {
 	c.AbortWithStatus(http.StatusNoContent)
 }

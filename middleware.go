@@ -5,13 +5,13 @@ import (
 	"github.com/nu7hatch/gouuid"
 )
 
-// Set some basic API middleware
+// SetMiddleware sets some basic API middleware
 func (s *Server) SetMiddleware(router *gin.Engine) {
 	router.Use(TracerMiddleware(s))
 	router.Use(CORSMiddleware())
 }
 
-// Adds session reference, uuid identification to every context
+// TracerMiddleware adds session reference, uuid identification to every request
 func TracerMiddleware(s *Server) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, _ := uuid.NewV4()
@@ -21,7 +21,7 @@ func TracerMiddleware(s *Server) gin.HandlerFunc {
 	}
 }
 
-// Allow cross-site requests using standard HTTP Access-Controll-* headers
+// CORSMiddleware allows cross-site requests using standard HTTP Access-Controll-* headers
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
