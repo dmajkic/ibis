@@ -79,7 +79,7 @@ func (g *gormDriver) FindAll(model interface{}, parentID interface{}, query stri
 	return &jsonapi.DocCollection{
 		Data:     collection,
 		Included: includes.ToArray(),
-		JsonApi:  &jsonapi.JSONApiObject{Version: "1.0"},
+		JSONApi:  &jsonapi.VersionMeta{Version: "1.0"},
 	}, nil
 }
 
@@ -100,7 +100,7 @@ func (g *gormDriver) FindRecord(model, id interface{}, query string) (*jsonapi.D
 	return &jsonapi.DocItem{
 		Data:     item,
 		Included: includes.ToArray(),
-		JsonApi:  &jsonapi.JSONApiObject{Version: "1.0"},
+		JSONApi:  &jsonapi.VersionMeta{Version: "1.0"},
 	}, nil
 }
 

@@ -67,7 +67,7 @@ func (s *Server) JWTloginHandler(c *gin.Context) {
 
 	user := make(map[string]interface{})
 
-	if err := s.App.LoginUser(c, user); err != nil {
+	if err := s.AppAuthorizer.LoginUser(c, user); err != nil {
 		JSONError(c, 401, fmt.Errorf("Auth failed"))
 		return
 	}

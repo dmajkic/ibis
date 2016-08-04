@@ -13,14 +13,10 @@ import (
 	// By default, none driver is alway present
 	_ "github.com/dmajkic/ibis/jsonapi/none"
 
+	"reflect"
+
 	"github.com/gin-gonic/gin"
 )
-
-// App interface that must be implemented by user application
-type App interface {
-	SetRoutes(router *gin.Engine)
-	LoginUser(c *gin.Context, user map[string]interface{}) error
-}
 
 // Config struct for basic configuration
 type Config struct {
@@ -42,9 +38,11 @@ type Server struct {
 	exit      chan struct{}
 	authToken string
 	Tokens    map[string]string
+	stopping  bool
 
-	stopping bool
-	App      App
+	App           interface{}
+	AppRouter     AppRouter
+	AppAuthorizer AppAuthorizer
 }
 
 // StartServer is non-blocking server bootstrap. The actual work is async.
@@ -94,7 +92,7 @@ func (s *Server) run() {
 	router := gin.Default()
 
 	s.SetMiddleware(router)
-	s.App.SetRoutes(router)
+	s.AppRouter.SetRoutes(router)
 
 	http.Handle("/", router)
 
@@ -187,22 +185,30 @@ func LoadConfig() (*Config, error) {
 	return conf, nil
 }
 
-// New Server constructor
-func New(app App, ormDriver string) (*Server, error) {
+// NewServer constructs new server instance
+func NewServer(app interface{}) *Server {
 
-	db, err := jsonapi.NewDatabase(ormDriver)
-	if err != nil {
-		return nil, err
-	}
+	modeldb := jsonapi.NewDatabase("none")
 
-	modeldb, err := jsonapi.NewDatabase("none")
-	if err != nil {
-		return nil, err
-	}
-
-	return &Server{
-		Db:      db,
+	server := &Server{
 		ModelDb: modeldb,
 		App:     app,
-	}, nil
+	}
+
+	v := reflect.ValueOf(app)
+	v.Elem().FieldByName("Server").Set(reflect.ValueOf(server))
+
+	if router, ok := app.(AppRouter); ok {
+		server.AppRouter = router
+	}
+
+	if auth, ok := app.(AppAuthorizer); ok {
+		server.AppAuthorizer = auth
+	}
+
+	for _, cent := range cents {
+		cent.Init(server)
+	}
+
+	return server
 }

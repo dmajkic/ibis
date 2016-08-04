@@ -2,7 +2,6 @@ package jsonapi
 
 import (
 	"errors"
-	"fmt"
 	"unicode"
 )
 
@@ -33,7 +32,7 @@ type Resourcer interface {
 	GetID() string
 }
 
-// Helper to convert Go public names camelCase
+// LowerInitial converts Go public names to camelCase
 func LowerInitial(str string) string {
 	for i, v := range str {
 		return string(unicode.ToUpper(v)) + str[i+1:]
@@ -49,10 +48,10 @@ func RegisterDriver(name string, database Database) {
 }
 
 // NewDatabase creates new DB driver object
-func NewDatabase(driver string) (Database, error) {
+func NewDatabase(driver string) Database {
 	if db, ok := dbDriverMap[driver]; ok {
-		return db, nil
+		return db
 	}
 
-	return nil, fmt.Errorf("Unknown database driver '%v'", driver)
+	panic("Unknown database driver" + driver)
 }

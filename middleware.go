@@ -5,6 +5,13 @@ import (
 	"github.com/nu7hatch/gouuid"
 )
 
+var midware = make(map[string]interface{})
+
+// RegisterMiddleware should be used from driver implementation
+func RegisterMiddleware(name string, iface interface{}) {
+	midware[name] = iface
+}
+
 // SetMiddleware sets some basic API middleware
 func (s *Server) SetMiddleware(router *gin.Engine) {
 	router.Use(TracerMiddleware(s))
